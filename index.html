@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Bulk WhatsApp Helper — Open chats without saving contacts</title>
+<style>
+  :root { --accent: #25D366; --bg: #f6f8fb; --card: #fff; --muted:#6b7280; }
+  body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; background: var(--bg); margin:0; padding:20px; color:#0f172a; }
+  .wrap { max-width:950px; margin:18px auto; }
+  header { display:flex; gap:12px; align-items:center; }
+  header h1 { margin:0; font-size:20px; }
+  .card { background:var(--card); border-radius:12px; padding:18px; box-shadow: 0 6px 18px rgba(12, 20, 39, 0.06); margin-top:16px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:6px; }
+  textarea, input[type="text"], input[type="number"]{ width:100%; padding:10px 12px; border-radius:8px; border:1px solid #e6e9ef; font-size:14px; box-sizing:border-box; }
+  .grid { display:grid; grid-template-columns: 1fr 240px; gap:12px; }
+  .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  button { background:var(--accent); color:white; border:none; padding:10px 14px; border-radius:8px; cursor:pointer; font-weight:600; }
+  button.secondary { background:transparent; color:#0f172a; border:1px solid #e6e9ef; }
+  .links { margin-top:14px; max-height:260px; overflow:auto; padding:8px; border-radius:8px; background:#fbfdff; border:1px dashed #e9eef6; }
+  .link-item { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px; border-radius:6px; background:linear-gradient(180deg,#fff,#fbfdff); margin-bottom:8px; }
+  .link-item a { text-decoration:none; color:#0f172a; font-size:13px; word-break:break-all; }
+  .muted { color:var(--muted); font-size:13px; }
+  .small { font-size:13px; color:#334155; }
+  footer { margin-top:18px; font-size:13px; color:var(--muted); }
+  .danger { background:#fee2e2; color:#9b1c1c; border-radius:6px; padding:8px; margin-top:12px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36' viewBox='0 0 24 24'><path fill='%2325D366' d='M20.52 3.48A11.95 11.95 0 0 0 12 0C5.37 0 .01 5.36.01 12c0 2.11.56 4.09 1.62 5.82L0 24l6.41-1.64A11.95 11.95 0 0 0 12 24c6.63 0 12-5.36 12-12 0-3.21-1.25-6.17-3.48-8.52z'/></svg>" alt="" />
+      <h1>Bulk WhatsApp Helper</h1>
+    </header>
+
+    <div class="card">
+      <div class="grid">
+        <div>
+          <label for="numbers">Phone numbers <span class="muted">(one per line, or comma separated). Can include + or not.</span></label>
+          <textarea id="numbers" rows="8" placeholder="e.g. 08031234567 OR +2348031234567 OR 2348031234567"></textarea>
+
+          <div style="display:flex; gap:8px; margin-top:10px;">
+            <div style="flex:1">
+              <label for="defaultCountry">Default country code (no +)</label>
+              <input id="defaultCountry" type="text" value="234" />
+            </div>
+            <div style="width:140px;">
+              <label for="openDelay">Open delay (ms)</label>
+              <input id="openDelay" type="number" value="1200" />
+            </div>
+          </div>
+
+          <label for="message" style="margin-top:12px;">Message</label>
+          <textarea id="message" rows="4" placeholder="Type the message that will be prefilled into WhatsApp. Use {name} as placeholder if you want to replace per contact (optional)."></textarea>
+
+          <div class="row">
+            <button id="generateBtn">Generate Links</button>
+            <button id="openSeqBtn" class="secondary">Open Sequentially</button>
+            <button id="copyBtn" class="secondary">Copy All Links</button>
+            <button id="clearBtn" class="secondary">Clear</button>
+          </div>
+
+          <div class="danger small">
+            Note: This tool only **opens** WhatsApp chat windows (wa.me links). You must press **Send** yourself in each chat. Opening many tabs/windows may be blocked by your browser — use the "Open Sequentially" button to reduce popup blocking.
+          </div>
+        </div>
+
+        <div>
+          <label>Preview / Generated links</label>
+          <div class="links" id="linksContainer">
+            <div class="muted">No links yet. Click <strong>Generate Links</strong>.</div>
+          </div>
+
+          <div style="margin-top:12px;">
+            <label>Export / actions</label>
+            <div class="row">
+              <button id="downloadCsv" class="secondary">Download CSV</button>
+              <button id="exportTxt" class="secondary">Export Text</button>
+            </div>
+            <p class="small" style="margin-top:10px">Tip: If some numbers don't include the country code, the default above will be prepended. Numbers are sanitized to digits only.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div class="small">Built for one-by-one user-driven messaging. Do not use for spam or unsolicited bulk messaging. Respect recipient consent and WhatsApp terms of service.</div>
+    </footer>
+  </div>
+
+<script>
+(function(){
+  const el = (id) => document.getElementById(id);
+  const numbersInput = el('numbers');
+  const defaultCountry = el('defaultCountry');
+  const messageInput = el('message');
+  const linksContainer = el('linksContainer');
+  const generateBtn = el('generateBtn');
+  const openSeqBtn = el('openSeqBtn');
+  const copyBtn = el('copyBtn');
+  const clearBtn = el('clearBtn');
+  const downloadCsv = el('downloadCsv');
+  const exportTxt = el('exportTxt');
+  const openDelayInput = el('openDelay');
+
+  let generated = []; // {raw, cleaned, link}
+
+  function sanitizeNumber(raw) {
+    if (!raw) return null;
+    // remove all non-digits and leading zeros (but keep zeros if it's part of number)
+    let s = String(raw).replace(/\s+/g, '');
+    // if it begins with +, remove
+    s = s.replace(/^\+/, '');
+    // remove all non-digit chars
+    s = s.replace(/\D/g, '');
+    // discard if too short
+    if (s.length < 6) return null;
+    return s;
+  }
+
+  function normalizeNumber(raw, defaultCc) {
+    let cleaned = sanitizeNumber(raw);
+    if (!cleaned) return null;
+    // If number starts with country code (length > 9), assume it's international already.
+    // Very simple heuristic: if length >= 10 and defaultCc is present, assume it's fine.
+    // If number length is less than default country + local length, prepend default.
+    if (defaultCc && !cleaned.startsWith(defaultCc) && cleaned.length <= 10) {
+      cleaned = defaultCc + cleaned.replace(/^0+/, ''); // remove leading zeros
+    }
+    return cleaned;
+  }
+
+  function buildWaLink(number, message) {
+    const encoded = encodeURIComponent(message || '');
+    // wa.me requires number without + or spaces
+    return `https://wa.me/${number}${encoded ? '?text=' + encoded : ''}`;
+  }
+
+  function renderLinks(list) {
+    linksContainer.innerHTML = '';
+    if (!list.length) {
+      linksContainer.innerHTML = '<div class="muted">No links yet. Click <strong>Generate Links</strong>.</div>';
+      return;
+    }
+    list.forEach((item, idx) => {
+      const div = document.createElement('div');
+      div.className = 'link-item';
+      const a = document.createElement('a');
+      a.href = item.link;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = item.link;
+      const right = document.createElement('div');
+      right.style.display = 'flex';
+      right.style.gap = '8px';
+      const btnCopy = document.createElement('button');
+      btnCopy.className = 'secondary';
+      btnCopy.style.padding = '6px 8px';
+      btnCopy.textContent = 'Open';
+      btnCopy.onclick = () => window.open(item.link, '_blank');
+      const small = document.createElement('div');
+      small.className = 'small';
+      small.textContent = item.cleaned;
+      right.appendChild(small);
+      right.appendChild(btnCopy);
+      div.appendChild(a);
+      div.appendChild(right);
+      linksContainer.appendChild(div);
+    });
+  }
+
+  function parseInputToList() {
+    const raw = numbersInput.value || '';
+    // split by newlines, commas, spaces
+    const parts = raw.split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+    const defaultCc = (defaultCountry.value || '').replace(/\D/g,'');
+    const message = messageInput.value || '';
+    const out = [];
+    parts.forEach(p => {
+      // allow entries like "John Doe <08031234567>" or "08031234567|Alice"
+      let rawnum = p;
+      // If there's a pipe, allow optional name: "number|name"
+      let name = '';
+      if (p.includes('|')) {
+        const seg = p.split('|');
+        rawnum = seg[0].trim();
+        name = seg.slice(1).join('|').trim();
+      } else {
+        // detect angle bracket pattern
+        const m = p.match(/<([^>]+)>/);
+        if (m) {
+          rawnum = m[1];
+          name = p.replace(m[0],'').replace(/["<>]/g,'').trim();
+        }
+      }
+      const cleaned = normalizeNumber(rawnum, defaultCc);
+      if (!cleaned) return;
+      // replace {name} placeholder if present
+      const personalizedMsg = name ? message.replace(/\{name\}/g, name) : message;
+      const link = buildWaLink(cleaned, personalizedMsg);
+      out.push({ raw: rawnum, cleaned, name, link, msg: personalizedMsg });
+    });
+    return out;
+  }
+
+  generateBtn.addEventListener('click', () => {
+    generated = parseInputToList();
+    renderLinks(generated);
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!generated.length) {
+      alert('No links to copy. Generate links first.');
+      return;
+    }
+    const text = generated.map(g => g.link).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      alert('All links copied to clipboard.');
+    } catch (e) {
+      prompt('Copy these links manually:', text);
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    numbersInput.value = '';
+    messageInput.value = '';
+    generated = [];
+    renderLinks([]);
+  });
+
+  openSeqBtn.addEventListener('click', async () => {
+    if (!generated.length) {
+      generated = parseInputToList();
+      renderLinks(generated);
+    }
+    if (!generated.length) {
+      alert('No valid numbers found. Check your input.');
+      return;
+    }
+    const delay = Math.max(300, Number(openDelayInput.value) || 1200);
+    if (!confirm(`This will open ${generated.length} chat windows sequentially in new tabs/windows. Browser popup blockers may intervene. Continue?`)) return;
+    for (let i = 0; i < generated.length; i++) {
+      try {
+        window.open(generated[i].link, '_blank');
+      } catch (e) {
+        console.warn('open blocked', e);
+      }
+      await new Promise(r => setTimeout(r, delay));
+    }
+  });
+
+  downloadCsv.addEventListener('click', () => {
+    if (!generated.length) {
+      generated = parseInputToList();
+      renderLinks(generated);
+    }
+    if (!generated.length) {
+      alert('No links to export.');
+      return;
+    }
+    const rows = [['number','name','link','message']];
+    generated.forEach(g => rows.push([g.cleaned, g.name || '', g.link, g.msg || '']));
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], {type:'text/csv'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'whatsapp_links.csv'; document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+  });
+
+  exportTxt.addEventListener('click', () => {
+    if (!generated.length) {
+      generated = parseInputToList();
+      renderLinks(generated);
+    }
+    if (!generated.length) {
+      alert('No links to export.');
+      return;
+    }
+    const txt = generated.map(g => g.link).join('\n');
+    const blob = new Blob([txt], {type:'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'whatsapp_links.txt'; document.body.appendChild(a); a.click();
+    a.remove(); URL.revokeObjectURL(url);
+  });
+
+  // initial render
+  renderLinks([]);
+})();
+</script>
+</body>
+</html>
